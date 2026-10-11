@@ -27,7 +27,8 @@ function doPost(e) {
   try {
     var req = JSON.parse(e.postData.contents);
     var fns = { getData: getData, verifyCode: verifyCode, savePassage: savePassage,
-                addAdresse: addAdresse, setEquipe: setEquipe, adminSetCodes: adminSetCodes };
+                addAdresse: addAdresse, setEquipe: setEquipe, adminSetCodes: adminSetCodes,
+                updateAdresse: updateAdresse, deleteAdresse: deleteAdresse };
     var f = fns[req.fn];
     if (!f) throw new Error('Action inconnue.');
     out = { ok: true, data: f(req.arg || {}) };
@@ -175,7 +176,7 @@ function clean_(s, max) {
 
 /** Enregistre un passage. p = {id, statut, montant, paiement, note, pompier} */
 function savePassage(p) {
-  checkCode_(p && p.code);
+  var role = checkCode_(p && p.code);
   if (!p || !p.id) throw new Error('Adresse manquante.');
   if (STATUTS.indexOf(p.statut) < 0) throw new Error('Statut inconnu.');
   var lock = LockService.getScriptLock();
@@ -192,12 +193,18 @@ function savePassage(p) {
     var montant = p.statut === 'Donné' && p.montant !== '' && p.montant != null ? Number(p.montant) : '';
     if (montant !== '' && (isNaN(montant) || montant < 0 || montant > 10000)) throw new Error('Montant invalide.');
     var vide = p.statut === '';
+    // Correction par le responsable : on garde l'équipe et la date d'origine
+    var equipe = clean_(p.pompier, 40), quand = new Date();
+    if (role === 'admin' && p.keepTeam && !vide) {
+      var old = sh.getRange(row, C.POMPIER, 1, 2).getValues()[0];
+      if (old[0]) { equipe = old[0]; quand = old[1] || quand; }
+    }
     sh.getRange(row, C.STATUT, 1, 6).setValues([[
       p.statut,
       vide ? '' : montant,
       vide || p.statut !== 'Donné' ? '' : clean_(p.paiement, 20),
-      vide ? '' : clean_(p.pompier, 40),
-      vide ? '' : new Date(),
+      vide ? '' : equipe,
+      vide ? '' : quand,
       clean_(p.note, 300)
     ]]);
     return rowToObj_(sh.getRange(row, 1, 1, NB_COL).getValues()[0]);
@@ -234,6 +241,44 @@ function addAdresse(a) {
     sh.getRange(last + 1, C.NUMERO).setNumberFormat('@');
     sh.getRange(last + 1, 1, 1, NB_COL).setValues([line]);
     return rowToObj_(line);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ---------- Espace responsable : adresses ---------- */
+function requireAdmin_(code) {
+  if (checkCode_(code) !== 'admin') throw new Error('Réservé au responsable.');
+}
+function findRow_(sh, id) {
+  var last = sh.getLastRow();
+  var ids = sh.getRange(2, C.ID, last - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(id)) return i + 2;
+  throw new Error('Adresse introuvable : ' + id);
+}
+/** a = {id, quartier, nom, numero, rue} */
+function updateAdresse(a) {
+  requireAdmin_(a && a.code);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = sheet_(), row = findRow_(sh, a.id);
+    sh.getRange(row, C.NUMERO).setNumberFormat('@');
+    sh.getRange(row, C.QUARTIER, 1, 4).setValues([[clean_(a.quartier, 60), clean_(a.nom, 80), clean_(a.numero, 20), clean_(a.rue, 80)]]);
+    return rowToObj_(sh.getRange(row, 1, 1, NB_COL).getValues()[0]);
+  } finally {
+    lock.releaseLock();
+  }
+}
+/** a = {id} */
+function deleteAdresse(a) {
+  requireAdmin_(a && a.code);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = sheet_();
+    sh.deleteRow(findRow_(sh, a.id));
+    return true;
   } finally {
     lock.releaseLock();
   }
