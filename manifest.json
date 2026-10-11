@@ -1,0 +1,16 @@
+{
+ "name": "Calendriers 2026 · Pompiers Puiselet-le-Marais",
+ "short_name": "Calendriers",
+ "start_url": "./",
+ "display": "standalone",
+ "background_color": "#F2F1EE",
+ "theme_color": "#1E4FA3",
+ "icons": [
+  {
+   "src": "icon.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any"
+  }
+ ]
+}
