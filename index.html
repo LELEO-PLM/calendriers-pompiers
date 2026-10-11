@@ -111,6 +111,22 @@ h2.sec{font-family:var(--display);font-size:1.05rem;text-transform:uppercase;let
 .foot p{margin:6px auto 0;max-width:40ch}
 .field.code{font-size:1.6rem;letter-spacing:.4em;text-align:center;font-variant-numeric:tabular-nums}
 .err{color:var(--flag);font-weight:600;margin:8px 0 0}
+.hello{gap:10px}
+.respbtn{flex:none;border:1.5px solid var(--red);color:var(--red);background:transparent;border-radius:99px;padding:7px 14px;font-weight:700;font-size:.88rem}
+.respbtn.on{background:var(--red);color:var(--red-ink)}
+.adm{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.adm .sec{margin:8px 0 0}
+.total.three{grid-template-columns:repeat(3,1fr);margin:0}
+.total.three b{font-size:1.45rem}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.card-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.card .nm{font-family:var(--display);font-size:1.2rem;min-width:0;overflow-wrap:anywhere}
+.card .eur{font-family:var(--display);font-size:1.2rem;font-variant-numeric:tabular-nums;flex:none}
+.card .meta{font-size:.86rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.card select.field{padding:10px 12px;font-size:1rem}
+.hint{font-size:.88rem;color:var(--muted);margin:2px 0}
+.danger{background:transparent;border:1px solid var(--flag);color:var(--flag);border-radius:12px;padding:13px;font-weight:600}
+.danger.armed{background:var(--flag);color:#fff}
 .empty-state{text-align:center;color:var(--muted);padding:36px 12px}
 .add{margin-top:20px;width:100%;border:2px dashed var(--line);background:transparent;border-radius:12px;padding:14px;font-weight:600;color:var(--muted)}
 
@@ -195,7 +211,7 @@ textarea.field{min-height:64px;resize:vertical;font-size:1rem}
 <script>
 (function(){
 'use strict';
-var KEY_CODE='cal26.code',KEY_EQ='cal26.equipes',KEY_NAME='cal26.pompier', KEY_Q='cal26.queue', KEY_CACHE='cal26.cache';
+var KEY_ADMIN='cal26.admin',KEY_CODE='cal26.code',KEY_EQ='cal26.equipes',KEY_NAME='cal26.pompier', KEY_Q='cal26.queue', KEY_CACHE='cal26.cache';
 var S={equipes:{},rows:[],byId:{},name:'',view:'home',sector:null,filter:'todo',q:'',queue:[],loaded:false,flushing:false,lastErr:''};
 
 function ls(k,v){try{if(v===undefined){var x=localStorage.getItem(k);return x?JSON.parse(x):null}localStorage.setItem(k,JSON.stringify(v))}catch(e){return null}}
@@ -203,7 +219,7 @@ function el(tag,attrs,kids){var e=document.createElement(tag);if(attrs)for(var k
 function eur(n){return (Math.round(n*100)/100).toLocaleString('fr-FR',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2})+' €'}
 var API='https://script.google.com/macros/s/AKfycbw6vON810LDunMWBjY8fmiGEPRzfZTTP7TSVdSu6loiq9pdp1R47sfwHyx82LKnPvAc/exec';
 function api(fn,arg){
-  arg=Object.assign({},arg||{},{code:S.code});
+  arg=Object.assign({code:S.admin||S.code},arg||{});
   return new Promise(function(res,rej){
     fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({fn:fn,arg:arg}),credentials:'omit',redirect:'follow'})
       .then(function(r){if(!r.ok)throw new Error('Erreur serveur ('+r.status+')');return r.json()})
@@ -212,7 +228,7 @@ function api(fn,arg){
   });
 }
 function isCodeErr(e){return /CODE_INVALIDE/.test(String(e))}
-function lockOut(msg){S.code='';ls(KEY_CODE,'');ls(KEY_CACHE,null);ls(KEY_EQ,null);S.rows=[];S.byId={};S.loaded=false;S.view='home';S.codeMsg=msg||'';closeSheet();render()}
+function lockOut(msg){S.code='';ls(KEY_CODE,'');S.admin='';ls(KEY_ADMIN,'');ls(KEY_CACHE,null);ls(KEY_EQ,null);S.rows=[];S.byId={};S.loaded=false;S.view='home';S.codeMsg=msg||'';closeSheet();render()}
 
 /* ---------- Données ---------- */
 function setRows(rows){
@@ -277,13 +293,14 @@ function render(){
   if(!S.code){mast.hidden=false;top.hidden=true;return renderCode(app)}
   if(!S.name){mast.hidden=false;top.hidden=true;return renderWelcome(app)}
   if(!S.loaded)return;
-  if(S.view==='sector'&&S.sector){mast.hidden=true;top.hidden=false;renderSector(app)}
+  if(S.view==='admin'){mast.hidden=true;top.hidden=false;renderAdmin(app)}
+  else if(S.view==='sector'&&S.sector){mast.hidden=true;top.hidden=false;renderSector(app)}
   else{mast.hidden=false;top.hidden=true;renderHome(app)}
 }
 
 function footer(){
   return el('footer',{class:'foot'},[
-    el('button',{class:'linkbtn',text:'Espace responsable',onclick:openAdmin}),
+    el('button',{class:'linkbtn',text:'Espace responsable',onclick:function(){if(S.code&&S.loaded)goAdmin();else openAdmin()}}),
     el('p',{text:'Responsable de la tournée : Jules FEVRE'}),el('p',{text:'© 2026 FEVRE Léo · Application créée par FEVRE Léo pour les sapeurs-pompiers de Puiselet-le-Marais'})]);
 }
 function renderCode(app){
@@ -294,7 +311,7 @@ function renderCode(app){
     var v=inp.value.trim();if(!v){inp.focus();return}
     go.disabled=true;go.textContent='Vérification…';
     S.code=v;
-    api('verifyCode').then(function(){ls(KEY_CODE,v);S.codeMsg='';render();load().then(flush)})
+    api('verifyCode',{code:v}).then(function(role){ls(KEY_CODE,v);if(role==='admin'){S.admin=v;ls(KEY_ADMIN,v)}S.codeMsg='';render();load().then(flush)})
       .catch(function(e){S.code='';go.disabled=false;go.textContent='Valider';msg.hidden=false;
         msg.textContent=isCodeErr(e)?'Code incorrect.':/TROP_ESSAIS/.test(e)?'Trop d’essais. Réessaie dans 10 minutes.':'Pas de connexion. Réessaie.';inp.select()});
   }});
@@ -307,6 +324,134 @@ function renderCode(app){
   ]));
   app.appendChild(footer());
   setTimeout(function(){inp.focus()},50);
+}
+
+/* ---------- Espace responsable ---------- */
+function goAdmin(){S.view='admin';S.adminTab=S.adminTab||'caisse';render();window.scrollTo(0,0)}
+function teamsList(){var s={};Object.keys(S.equipes).forEach(function(k){if(S.equipes[k])s[S.equipes[k]]=1});S.rows.forEach(function(r){if(r.pompier)s[r.pompier]=1});return Object.keys(s).sort(function(a,b){return a.localeCompare(b,'fr')})}
+function renderAdmin(app){
+  var all=stats(S.rows);
+  document.getElementById('secName').textContent='Espace responsable';
+  document.getElementById('secStats').textContent=eur(all.eur)+' collectés · '+(all.ok+all.no)+' / '+all.n+' maisons';
+  app.innerHTML='';
+  if(!S.admin){
+    var inp=el('input',{class:'field code',id:'admLogin',type:'password',autocomplete:'off',maxlength:'12',placeholder:'••••'});
+    var msg=el('p',{class:'err'});msg.hidden=true;
+    var go=el('button',{class:'primary',text:'Entrer',onclick:function(){
+      var v=inp.value.trim();if(!v){inp.focus();return}
+      go.disabled=true;
+      api('verifyCode',{code:v}).then(function(role){
+        if(role!=='admin'){go.disabled=false;msg.hidden=false;msg.textContent='Ce n’est pas le code responsable.';return}
+        S.admin=v;ls(KEY_ADMIN,v);render();toast('Mode responsable activé');
+      }).catch(function(e){go.disabled=false;msg.hidden=false;msg.textContent=isCodeErr(e)?'Code incorrect.':/TROP_ESSAIS/.test(e)?'Trop d’essais. Réessaie dans 10 minutes.':'Pas de connexion. Réessaie.'});
+    }});
+    inp.addEventListener('keydown',function(e){if(e.key==='Enter')go.click()});
+    app.appendChild(el('div',{class:'welcome'},[el('h2',{text:'Code responsable'}),
+      el('p',{text:'Réservé à Jules FEVRE, responsable de la tournée. Une fois entré, ce téléphone reste en mode responsable.'}),
+      el('label',{class:'lbl',for:'admLogin',text:'Code responsable'}),inp,msg,el('div',{class:'actions'},[go])]));
+    app.appendChild(footer());setTimeout(function(){inp.focus()},50);return;
+  }
+  var T=[['caisse','Caisse'],['secteurs','Secteurs'],['codes','Codes']];
+  var chips=el('div',{class:'chips',role:'group','aria-label':'Rubriques',style:'margin-top:14px'});
+  T.forEach(function(x){chips.appendChild(el('button',{class:'chip','aria-pressed':String(S.adminTab===x[0]),text:x[1],onclick:function(){S.adminTab=x[0];render()}}))});
+  app.appendChild(chips);
+  var box=el('div',{class:'adm'});app.appendChild(box);
+  if(S.adminTab==='secteurs')admSecteurs(box);else if(S.adminTab==='codes')admCodes(box);else admCaisse(box);
+  app.appendChild(el('button',{class:'linkbtn',style:'display:block;margin:22px auto 0',text:'Quitter le mode responsable',onclick:function(){S.admin='';ls(KEY_ADMIN,'');S.view='home';render();toast('Mode responsable désactivé')}}));
+  app.appendChild(footer());
+}
+function admCaisse(box){
+  var T={},tot={esp:0,chq:0,autre:0,n:0};
+  S.rows.forEach(function(r){
+    if(!r.statut)return;var k=r.pompier||'Équipe non précisée';
+    var t=T[k]||(T[k]={name:k,n:0,esp:0,chq:0,autre:0,abs:0,ref:0});
+    if(r.statut==='Donné'){var m=Number(r.montant)||0;t.n++;tot.n++;if(r.paiement==='Chèque'){t.chq+=m;tot.chq+=m}else if(r.paiement==='Espèces'){t.esp+=m;tot.esp+=m}else{t.autre+=m;tot.autre+=m}}
+    else if(r.statut==='Absent')t.abs++;else if(r.statut==='Refus')t.ref++;
+  });
+  box.appendChild(el('div',{class:'total three'},[
+    el('div',{},[el('b',{text:eur(tot.esp+tot.autre)}),el('span',{text:'Espèces'})]),
+    el('div',{},[el('b',{text:eur(tot.chq)}),el('span',{text:'Chèques'})]),
+    el('div',{},[el('b',{text:String(tot.n)}),el('span',{text:'Calendriers'})])]));
+  var list=Object.keys(T).map(function(k){return T[k]}).sort(function(a,b){return (b.esp+b.chq+b.autre)-(a.esp+a.chq+a.autre)});
+  box.appendChild(el('h2',{class:'sec',text:'Par équipe'}));
+  if(!list.length){box.appendChild(el('div',{class:'empty-state',text:'Aucun passage enregistré pour l’instant.'}));return}
+  list.forEach(function(t){
+    var lines=[t.n+' calendrier'+(t.n>1?'s':''),'Espèces '+eur(t.esp+t.autre),'Chèques '+eur(t.chq)];
+    if(t.abs)lines.push(t.abs+' absent'+(t.abs>1?'s':''));if(t.ref)lines.push(t.ref+' refus');
+    box.appendChild(el('div',{class:'card'},[el('div',{class:'card-row'},[el('b',{class:'nm',text:t.name}),el('b',{class:'eur',text:eur(t.esp+t.chq+t.autre)})]),el('div',{class:'meta',text:lines.join(' · ')})]));
+  });
+  box.appendChild(el('p',{class:'hint',text:'Pour corriger un montant : ouvre le secteur et touche la maison. En mode responsable, la correction reste au nom de l’équipe d’origine.'}));
+}
+function assign(sec,team){
+  S.equipes[sec]=team;render();
+  api('setEquipe',{secteur:sec,equipe:team}).then(function(e){S.equipes=e;ls(KEY_EQ,e);render();toast(team?sec+' → '+team:sec+' libéré')}).catch(function(e){if(isCodeErr(e))return lockOut('Le code a changé.');toast('Non enregistré : '+e,true);load()});
+}
+function admSecteurs(box){
+  var teams=teamsList();
+  box.appendChild(el('p',{class:'hint',text:'Choisis l’équipe de chaque secteur. « Libre » le rend disponible pour tout le monde.'}));
+  sectors().forEach(function(s,i){
+    var st=stats(s.rows),cur=S.equipes[s.name]||'';
+    var sel=el('select',{class:'field',id:'as'+i,'aria-label':'Équipe pour '+s.name});
+    sel.appendChild(el('option',{value:'',text:'Libre'}));
+    teams.concat(cur&&teams.indexOf(cur)<0?[cur]:[]).forEach(function(n){var o=el('option',{value:n,text:n});if(n===cur)o.selected=true;sel.appendChild(o)});
+    sel.appendChild(el('option',{value:'__new',text:'+ Nouvelle équipe…'}));
+    var other=el('div',{class:'row2'});other.hidden=true;
+    var oi=el('input',{class:'field',id:'ao'+i,placeholder:'Nom de l’équipe',maxlength:'40'});
+    other.appendChild(oi);other.appendChild(el('button',{class:'primary small',text:'OK',onclick:function(){var v=oi.value.trim();if(v)assign(s.name,v)}}));
+    sel.addEventListener('change',function(){if(sel.value==='__new'){other.hidden=false;oi.focus()}else{other.hidden=true;assign(s.name,sel.value)}});
+    box.appendChild(el('div',{class:'card'},[
+      el('div',{class:'card-row'},[el('b',{class:'nm',text:s.name}),el('span',{class:'meta',text:(st.ok+st.no)+' / '+st.n+' · '+eur(st.eur)})]),
+      el('div',{class:'bar','aria-hidden':'true'},[el('i',{class:'b-ok',style:'width:'+(st.ok/st.n*100)+'%'}),el('i',{class:'b-no',style:'width:'+(st.no/st.n*100)+'%'}),el('i',{class:'b-warn',style:'width:'+(st.warn/st.n*100)+'%'})]),
+      sel,other]));
+  });
+}
+function admCodes(box){
+  box.appendChild(el('p',{class:'hint',text:'Change le code des pompiers à tout moment. Les téléphones déjà connectés devront entrer le nouveau code ; leurs passages non envoyés sont gardés.'}));
+  var p=el('input',{class:'field',id:'acPomp',inputmode:'numeric',autocomplete:'off',maxlength:'12',placeholder:'4 chiffres ou plus'});
+  var n=el('input',{class:'field',id:'acAdm',type:'password',autocomplete:'off',maxlength:'12',placeholder:'Laisser vide pour ne pas changer'});
+  var msg=el('p',{class:'err'});msg.hidden=true;
+  box.appendChild(el('label',{class:'lbl',for:'acPomp',text:'Nouveau code pompiers'}));box.appendChild(p);
+  box.appendChild(el('label',{class:'lbl',for:'acAdm',text:'Nouveau code responsable (facultatif)'}));box.appendChild(n);
+  box.appendChild(msg);
+  var b=el('button',{class:'primary',text:'Enregistrer les codes',onclick:function(){
+    var pv=p.value.trim(),nv=n.value.trim();if(!pv&&!nv){p.focus();return}
+    b.disabled=true;var old=S.admin;
+    api('adminSetCodes',{admin:old,pompiers:pv,nouvelAdmin:nv}).then(function(){
+      if(nv){if(S.code===old){S.code=nv;ls(KEY_CODE,nv)}S.admin=nv;ls(KEY_ADMIN,nv)}
+      if(pv&&S.code!==S.admin){S.code=pv;ls(KEY_CODE,pv)}
+      p.value='';n.value='';b.disabled=false;msg.hidden=true;toast('Codes mis à jour');
+    }).catch(function(e){b.disabled=false;msg.hidden=false;msg.textContent=/TROP_ESSAIS/.test(e)?'Trop d’essais. Réessaie dans 10 minutes.':String(e).replace(/^Error:\s*/,'')});
+  }});
+  box.appendChild(el('div',{class:'actions'},[b]));
+}
+function openEditAddr(r){
+  showSheet(function(inn){
+    inn.appendChild(el('h2',{class:'sh-addr',id:'shAddr',text:'Modifier l’adresse'}));
+    inn.appendChild(el('p',{class:'sh-who',text:r.secteur}));
+    var rues=[],seen={};S.rows.forEach(function(x){if(x.secteur===r.secteur&&x.rue&&!seen[x.rue]){seen[x.rue]=1;rues.push(x.rue)}});
+    var dl=el('datalist',{id:'eRues'});rues.forEach(function(x){dl.appendChild(el('option',{value:x}))});inn.appendChild(dl);
+    var num=el('input',{class:'field',id:'eNum',value:r.numero});
+    var rue=el('input',{class:'field',id:'eRue',list:'eRues',value:r.rue});
+    var nom=el('input',{class:'field',id:'eNom',value:r.nom});
+    var qua=el('input',{class:'field',id:'eQua',value:r.quartier,placeholder:'Ex. Ézerville (facultatif)'});
+    [['eNum','Numéro',num],['eRue','Rue',rue],['eNom','Nom',nom],['eQua','Hameau / quartier',qua]].forEach(function(x){inn.appendChild(el('label',{class:'lbl',for:x[0],text:x[1]}));inn.appendChild(x[2])});
+    var msg=el('p',{class:'err'});msg.hidden=true;inn.appendChild(msg);
+    var save=el('button',{class:'primary',text:'Enregistrer',onclick:function(){
+      save.disabled=true;
+      api('updateAdresse',{id:r.id,numero:num.value.trim(),rue:rue.value.trim(),nom:nom.value.trim(),quartier:qua.value.trim()}).then(function(row){
+        Object.assign(S.byId[r.id]||r,{numero:row.numero,rue:row.rue,nom:row.nom,quartier:row.quartier});ls(KEY_CACHE,S.rows);closeSheet();render();toast('Adresse modifiée');
+      }).catch(function(e){save.disabled=false;msg.hidden=false;msg.textContent=String(e)});
+    }});
+    var armed=false;
+    var del=el('button',{class:'danger',text:'Supprimer cette adresse',onclick:function(){
+      if(!armed){armed=true;del.classList.add('armed');del.textContent='Confirmer : supprimer définitivement';return}
+      del.disabled=true;
+      api('deleteAdresse',{id:r.id}).then(function(){
+        S.rows=S.rows.filter(function(x){return x.id!==r.id});delete S.byId[r.id];ls(KEY_CACHE,S.rows);closeSheet();render();toast('Adresse supprimée');
+      }).catch(function(e){del.disabled=false;msg.hidden=false;msg.textContent=String(e)});
+    }});
+    inn.appendChild(el('div',{class:'actions'},[save,del,el('button',{class:'ghost',text:'Annuler',onclick:closeSheet})]));
+  });
 }
 
 function openAdmin(){
@@ -353,7 +498,7 @@ function renderWelcome(app){
 function renderHome(app){
   app.innerHTML='';
   var secs=sectors(),all=stats(S.rows);
-  app.appendChild(el('div',{class:'hello'},[el('span',{text:'Équipe : '+S.name}),el('button',{class:'linkbtn',text:'Changer',onclick:function(){S.name='';ls(KEY_NAME,'');render()}})]));
+  app.appendChild(el('div',{class:'hello'},[el('span',{},[el('span',{text:'Équipe : '+S.name+' · '}),el('button',{class:'linkbtn',text:'Changer',onclick:function(){S.name='';ls(KEY_NAME,'');render()}})]),el('button',{class:'respbtn'+(S.admin?' on':''),text:S.admin?'Responsable ✓':'Responsable',onclick:goAdmin})]));
   app.appendChild(el('div',{class:'total'},[
     el('div',{},[el('b',{text:eur(all.eur)}),el('span',{text:'Collecté'})]),
     el('div',{},[el('b',{text:(all.ok+all.no)+' / '+all.n}),el('span',{text:'Maisons faites'})])
@@ -478,6 +623,7 @@ function openSheet(id){
     if(r.a2025)info.push(el('span',{class:'tag',text:'2025 : '+val2025(r.a2025)}));
     if(info.length)inn.appendChild(el('div',{class:'info'},info));
     if(r.statut&&r.pompier)inn.appendChild(el('p',{class:'last',text:'Déjà noté par '+r.pompier+(r.date?' le '+r.date:'')}));
+    if(S.admin&&r.statut&&r.pompier)inn.appendChild(el('p',{class:'last',text:'Mode responsable : ta correction reste au nom de l’équipe '+r.pompier+'.'}));
 
     inn.appendChild(el('span',{class:'lbl',text:'Résultat'}));
     var seg=el('div',{class:'seg',role:'group','aria-label':'Résultat du passage'});
@@ -505,12 +651,13 @@ function openSheet(id){
 
     var save=el('button',{class:'primary',text:'Enregistrer',onclick:function(){
       if(!f.statut)return;
-      enqueue({id:r.id,statut:f.statut,montant:f.statut==='Donné'&&f.montant!==''?Number(String(f.montant).replace(',','.')):'',paiement:f.statut==='Donné'?f.paiement:'',note:f.note.trim(),pompier:S.name,ts:Date.now()});
+      enqueue({id:r.id,statut:f.statut,montant:f.statut==='Donné'&&f.montant!==''?Number(String(f.montant).replace(',','.')):'',paiement:f.statut==='Donné'?f.paiement:'',note:f.note.trim(),pompier:S.name,keepTeam:!!S.admin,ts:Date.now()});
       closeSheet();render();toast(f.statut==='Donné'?'Enregistré : '+(f.montant?eur(Number(String(f.montant).replace(',','.'))):'calendrier donné'):'Enregistré : '+f.statut.toLowerCase());
     }});
     var acts=el('div',{class:'actions'},[save]);
     if(r.statut)acts.appendChild(el('button',{class:'ghost',text:'Remettre « à faire »',onclick:function(){
       enqueue({id:r.id,statut:'',montant:'',paiement:'',note:f.note.trim(),pompier:S.name,ts:Date.now()});closeSheet();render();toast('Remis à faire')}}));
+    if(S.admin)acts.appendChild(el('button',{class:'ghost',text:'Modifier ou supprimer l’adresse',onclick:function(){openEditAddr(r)}}));
     acts.appendChild(el('button',{class:'ghost',text:'Fermer',onclick:closeSheet}));
     inn.appendChild(acts);
 
@@ -554,7 +701,7 @@ function openAdd(){
 /* ---------- Démarrage ---------- */
 S.name=ls(KEY_NAME)||'';
 S.queue=ls(KEY_Q)||[];
-S.code=ls(KEY_CODE)||'';S.equipes=ls(KEY_EQ)||{};var cache=S.code?ls(KEY_CACHE):null;if(cache&&cache.length){setRows(cache)}
+S.admin=ls(KEY_ADMIN)||'';S.code=ls(KEY_CODE)||'';S.equipes=ls(KEY_EQ)||{};var cache=S.code?ls(KEY_CACHE):null;if(cache&&cache.length){setRows(cache)}
 render();
 load().then(flush);
 setInterval(function(){if(S.code&&document.visibilityState==='visible'&&document.getElementById('sheet').hidden&&!S.flushing)load()},45000);
