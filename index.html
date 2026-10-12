@@ -116,8 +116,8 @@ h2.sec{font-family:var(--display);font-size:1.05rem;text-transform:uppercase;let
 .respbtn.on{background:var(--red);color:var(--red-ink)}
 .adm{display:flex;flex-direction:column;gap:10px;margin-top:14px}
 .adm .sec{margin:8px 0 0}
-.total.three{grid-template-columns:repeat(3,1fr);margin:0}
-.total.three b{font-size:1.45rem}
+.total.four{grid-template-columns:1fr 1fr;margin:0}
+.total.four b{font-size:1.5rem}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .card-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .card .nm{font-family:var(--display);font-size:1.2rem;min-width:0;overflow-wrap:anywhere}
@@ -156,8 +156,8 @@ h2.sec{font-family:var(--display);font-size:1.05rem;text-transform:uppercase;let
 .money{position:relative}
 .money input{padding-right:34px;font-variant-numeric:tabular-nums}
 .money::after{content:"€";position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:600}
-.pay{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.pay button{border:1px solid var(--line);background:var(--bg);border-radius:10px;font-weight:600;padding:0 4px}
+.pay{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pay button{border:1px solid var(--line);background:var(--bg);border-radius:10px;font-weight:600;padding:12px 4px;min-height:48px}
 .pay button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 textarea.field{min-height:64px;resize:vertical;font-size:1rem}
 .actions{display:flex;flex-direction:column;gap:8px;margin-top:18px}
@@ -216,7 +216,7 @@ var S={equipes:{},rows:[],byId:{},name:'',view:'home',sector:null,filter:'todo',
 
 function ls(k,v){try{if(v===undefined){var x=localStorage.getItem(k);return x?JSON.parse(x):null}localStorage.setItem(k,JSON.stringify(v))}catch(e){return null}}
 function el(tag,attrs,kids){var e=document.createElement(tag);if(attrs)for(var k in attrs){if(k==='text')e.textContent=attrs[k];else if(k==='class')e.className=attrs[k];else if(k.slice(0,2)==='on')e.addEventListener(k.slice(2),attrs[k]);else if(attrs[k]!=null&&attrs[k]!==false)e.setAttribute(k,attrs[k])}(kids||[]).forEach(function(c){if(c!=null)e.appendChild(typeof c==='string'?document.createTextNode(c):c)});return e}
-function eur(n){return (Math.round(n*100)/100).toLocaleString('fr-FR',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2})+' €'}
+function eur(n){return (Math.round(n*100)/100).toLocaleString('fr-FR',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2})+'\u00a0€'}
 var API='https://script.google.com/macros/s/AKfycbw6vON810LDunMWBjY8fmiGEPRzfZTTP7TSVdSu6loiq9pdp1R47sfwHyx82LKnPvAc/exec';
 function api(fn,arg){
   arg=Object.assign({code:S.admin||S.code},arg||{});
@@ -232,8 +232,8 @@ function lockOut(msg){S.code='';ls(KEY_CODE,'');S.admin='';ls(KEY_ADMIN,'');ls(K
 
 /* ---------- Données ---------- */
 function setRows(rows){
-  var pend={};S.queue.forEach(function(p){pend[p.id]=p});
-  S.rows=rows.map(function(r){var p=pend[r.id];if(p){r=Object.assign({},r,{statut:p.statut,montant:p.montant,paiement:p.paiement,note:p.note,pompier:p.pompier,_pending:true})}return r});
+  var pend={},pnom={};S.queue.forEach(function(p){if(p.kind==='nom')pnom[p.id]=p.nom;else pend[p.id]=p});
+  S.rows=rows.map(function(r){var p=pend[r.id];if(p){r=Object.assign({},r,{statut:p.statut,montant:p.montant,paiement:p.paiement,note:p.note,pompier:p.pompier,_pending:true})}if(r.id in pnom){r=Object.assign({},r,{nom:pnom[r.id],_pending:true})}return r});
   S.byId={};S.rows.forEach(function(r){S.byId[r.id]=r});
   S.loaded=true;
 }
@@ -259,17 +259,18 @@ function load(){
 
 /* ---------- File d'envoi (marche sans réseau) ---------- */
 function enqueue(p){
-  S.queue=S.queue.filter(function(x){return x.id!==p.id});S.queue.push(p);ls(KEY_Q,S.queue);
-  var r=S.byId[p.id];if(r){Object.assign(r,{statut:p.statut,montant:p.montant,paiement:p.paiement,note:p.note,pompier:p.pompier,_pending:true})}
+  S.queue=S.queue.filter(function(x){return !(x.id===p.id&&(x.kind||'')===(p.kind||''))});S.queue.push(p);ls(KEY_Q,S.queue);
+  var r=S.byId[p.id];if(r){if(p.kind==='nom')Object.assign(r,{nom:p.nom,_pending:true});else Object.assign(r,{statut:p.statut,montant:p.montant,paiement:p.paiement,note:p.note,pompier:p.pompier,_pending:true})}
   flush();
 }
 function flush(){
   if(S.flushing||!S.queue.length||!S.code){showSync();return}
   S.flushing=true;showSync();
   var p=S.queue[0];
-  api('savePassage',p).then(function(saved){
-    S.queue=S.queue.filter(function(x){return !(x.id===p.id&&x.ts===p.ts)});ls(KEY_Q,S.queue);
-    if(!S.queue.some(function(x){return x.id===saved.id})){var r=S.byId[saved.id];if(r){Object.assign(r,saved);delete r._pending}}
+  api(p.kind==='nom'?'setNom':'savePassage',p).then(function(saved){
+    S.queue=S.queue.filter(function(x){return !(x.id===p.id&&x.ts===p.ts&&(x.kind||'')===(p.kind||''))});ls(KEY_Q,S.queue);
+    var r=S.byId[saved.id];
+    if(r){if(!S.queue.some(function(x){return x.id===saved.id})){Object.assign(r,saved);delete r._pending}else if(p.kind==='nom'){r.nom=saved.nom}}
     S.lastErr='';S.flushing=false;render();flush();
   }).catch(function(e){
     S.flushing=false;S.lastErr=e;
@@ -361,24 +362,25 @@ function renderAdmin(app){
   app.appendChild(footer());
 }
 function admCaisse(box){
-  var T={},tot={esp:0,chq:0,autre:0,n:0};
+  var T={},tot={esp:0,chq:0,cb:0,autre:0,n:0};
   S.rows.forEach(function(r){
     if(!r.statut)return;var k=r.pompier||'Équipe non précisée';
-    var t=T[k]||(T[k]={name:k,n:0,esp:0,chq:0,autre:0,abs:0,ref:0});
-    if(r.statut==='Donné'){var m=Number(r.montant)||0;t.n++;tot.n++;if(r.paiement==='Chèque'){t.chq+=m;tot.chq+=m}else if(r.paiement==='Espèces'){t.esp+=m;tot.esp+=m}else{t.autre+=m;tot.autre+=m}}
+    var t=T[k]||(T[k]={name:k,n:0,esp:0,chq:0,cb:0,autre:0,abs:0,ref:0});
+    if(r.statut==='Donné'){var m=Number(r.montant)||0;t.n++;tot.n++;if(r.paiement==='Chèque'){t.chq+=m;tot.chq+=m}else if(r.paiement==='CB'){t.cb+=m;tot.cb+=m}else if(r.paiement==='Espèces'){t.esp+=m;tot.esp+=m}else{t.autre+=m;tot.autre+=m}}
     else if(r.statut==='Absent')t.abs++;else if(r.statut==='Refus')t.ref++;
   });
-  box.appendChild(el('div',{class:'total three'},[
+  box.appendChild(el('div',{class:'total four'},[
     el('div',{},[el('b',{text:eur(tot.esp+tot.autre)}),el('span',{text:'Espèces'})]),
     el('div',{},[el('b',{text:eur(tot.chq)}),el('span',{text:'Chèques'})]),
+    el('div',{},[el('b',{text:eur(tot.cb)}),el('span',{text:'CB'})]),
     el('div',{},[el('b',{text:String(tot.n)}),el('span',{text:'Calendriers'})])]));
-  var list=Object.keys(T).map(function(k){return T[k]}).sort(function(a,b){return (b.esp+b.chq+b.autre)-(a.esp+a.chq+a.autre)});
+  var list=Object.keys(T).map(function(k){return T[k]}).sort(function(a,b){return (b.esp+b.chq+b.cb+b.autre)-(a.esp+a.chq+a.cb+a.autre)});
   box.appendChild(el('h2',{class:'sec',text:'Par équipe'}));
   if(!list.length){box.appendChild(el('div',{class:'empty-state',text:'Aucun passage enregistré pour l’instant.'}));return}
   list.forEach(function(t){
-    var lines=[t.n+' calendrier'+(t.n>1?'s':''),'Espèces '+eur(t.esp+t.autre),'Chèques '+eur(t.chq)];
+    var lines=[t.n+' calendrier'+(t.n>1?'s':''),'Espèces\u00a0'+eur(t.esp+t.autre),'Chèques\u00a0'+eur(t.chq)];if(t.cb)lines.push('CB\u00a0'+eur(t.cb));
     if(t.abs)lines.push(t.abs+' absent'+(t.abs>1?'s':''));if(t.ref)lines.push(t.ref+' refus');
-    box.appendChild(el('div',{class:'card'},[el('div',{class:'card-row'},[el('b',{class:'nm',text:t.name}),el('b',{class:'eur',text:eur(t.esp+t.chq+t.autre)})]),el('div',{class:'meta',text:lines.join(' · ')})]));
+    box.appendChild(el('div',{class:'card'},[el('div',{class:'card-row'},[el('b',{class:'nm',text:t.name}),el('b',{class:'eur',text:eur(t.esp+t.chq+t.cb+t.autre)})]),el('div',{class:'meta',text:lines.join(' · ')})]));
   });
   box.appendChild(el('p',{class:'hint',text:'Pour corriger un montant : ouvre le secteur et touche la maison. En mode responsable, la correction reste au nom de l’équipe d’origine.'}));
 }
@@ -617,13 +619,20 @@ function openSheet(id){
   showSheet(function(inn){
     var addr=[r.numero,r.rue].filter(Boolean).join(' ')||r.quartier||r.secteur;
     inn.appendChild(el('h2',{class:'sh-addr',id:'shAddr',text:addr}));
-    var who=[r.nom,r.quartier].filter(Boolean).join(' · ');if(who)inn.appendChild(el('p',{class:'sh-who',text:who}));
+    if(r.quartier)inn.appendChild(el('p',{class:'sh-who',text:r.quartier}));
     var info=[];
     if(r.remarque)info.push(el('span',{class:'tag',text:r.remarque}));
     if(r.a2025)info.push(el('span',{class:'tag',text:'2025 : '+val2025(r.a2025)}));
     if(info.length)inn.appendChild(el('div',{class:'info'},info));
     if(r.statut&&r.pompier)inn.appendChild(el('p',{class:'last',text:'Déjà noté par '+r.pompier+(r.date?' le '+r.date:'')}));
     if(S.admin&&r.statut&&r.pompier)inn.appendChild(el('p',{class:'last',text:'Mode responsable : ta correction reste au nom de l’équipe '+r.pompier+'.'}));
+
+    inn.appendChild(el('label',{class:'lbl',for:'hNom',text:'Nom et prénom des habitants'}));
+    var hn=el('input',{class:'field',id:'hNom',maxlength:'80',autocomplete:'off',autocapitalize:'words',placeholder:'Ex. DUPONT Marie (complète si tu le vois)'});hn.value=r.nom||'';
+    hn.addEventListener('input',function(){sync(true)});
+    inn.appendChild(hn);
+    inn.appendChild(el('p',{class:'hint',text:'Lu sur la boîte aux lettres ou donné par les habitants : ça sert de base pour l’an prochain.'}));
+    function nomChanged(){return hn.value.trim().replace(/\s+/g,' ')!==(r.nom||'')}
 
     inn.appendChild(el('span',{class:'lbl',text:'Résultat'}));
     var seg=el('div',{class:'seg',role:'group','aria-label':'Résultat du passage'});
@@ -640,8 +649,10 @@ function openSheet(id){
     var mi=el('input',{class:'field',id:'montant',type:'number',inputmode:'decimal',min:'0',step:'0.5',placeholder:'Autre montant',value:f.montant,'aria-label':'Montant en euros'});
     mi.addEventListener('input',function(){f.montant=mi.value;sync(true)});
     var pay=el('div',{class:'pay',role:'group','aria-label':'Moyen de paiement'});
-    ['Espèces','Chèque'].forEach(function(p){pay.appendChild(el('button',{'aria-pressed':String(f.paiement===p),text:p,onclick:function(){f.paiement=p;sync()}}))});
-    money.appendChild(el('div',{class:'row2'},[el('div',{class:'money'},[mi]),pay]));
+    ['Espèces','Chèque','CB'].forEach(function(p){pay.appendChild(el('button',{'aria-pressed':String(f.paiement===p),text:p,onclick:function(){f.paiement=p;sync()}}))});
+    money.appendChild(el('div',{class:'money',style:'margin-top:8px'},[mi]));
+    money.appendChild(el('span',{class:'lbl',text:'Paiement'}));
+    money.appendChild(pay);
     inn.appendChild(money);
 
     inn.appendChild(el('label',{class:'lbl',for:'note',text:'Note (facultatif)'}));
@@ -650,7 +661,10 @@ function openSheet(id){
     inn.appendChild(note);
 
     var save=el('button',{class:'primary',text:'Enregistrer',onclick:function(){
-      if(!f.statut)return;
+      if(!f.statut&&!nomChanged())return;
+      var nc=nomChanged();
+      if(nc)enqueue({kind:'nom',id:r.id,nom:hn.value.trim().replace(/\s+/g,' '),pompier:S.name,ts:Date.now()});
+      if(!f.statut||(f.statut===r.statut&&!S.admin&&String(f.montant)===String(r.montant===''||r.montant==null?'':r.montant)&&f.paiement===(r.paiement||'Espèces')&&f.note.trim()===(r.note||''))){closeSheet();render();toast('Nom enregistré');return}
       enqueue({id:r.id,statut:f.statut,montant:f.statut==='Donné'&&f.montant!==''?Number(String(f.montant).replace(',','.')):'',paiement:f.statut==='Donné'?f.paiement:'',note:f.note.trim(),pompier:S.name,keepTeam:!!S.admin,ts:Date.now()});
       closeSheet();render();toast(f.statut==='Donné'?'Enregistré : '+(f.montant?eur(Number(String(f.montant).replace(',','.'))):'calendrier donné'):'Enregistré : '+f.statut.toLowerCase());
     }});
@@ -666,7 +680,7 @@ function openSheet(id){
       money.hidden=f.statut!=='Donné';
       am.querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-v')===String(f.montant)))});
       pay.querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',String(b.textContent===f.paiement))});
-      save.disabled=!f.statut;
+      save.disabled=!(f.statut||nomChanged());
       if(!fromInput&&f.statut==='Donné'&&!f.montant)setTimeout(function(){},0);
     }
     sync();
